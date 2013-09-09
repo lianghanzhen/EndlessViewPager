@@ -5,6 +5,9 @@ import android.os.Looper;
 import android.os.Message;
 import android.support.v4.view.ViewPager;
 
+import java.util.ArrayList;
+import java.util.List;
+
 
 /**
  * use to handle ViewPager auto scroll.
@@ -25,15 +28,11 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
     };
 
     private final ViewPager mViewPager;
-    private long mSwitchDelay;
+    private final List<Long> mSwitchDelay = new ArrayList<Long>();
 
     private boolean mRunning;
 
-    public BannerHandler(ViewPager viewPager) {
-        this(viewPager, DEFAULT_SWITCH_DELAY);
-    }
-
-    public BannerHandler(ViewPager viewPager, long switchDelay) {
+    public BannerHandler(ViewPager viewPager, long ... switchDelay) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             throw new IllegalStateException("Do not use BannerHandler out of main looper.");
         }
@@ -44,7 +43,23 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
             throw new IllegalArgumentException("Did you forget set an adapter for ViewPager?");
         }
         mViewPager = viewPager;
-        mSwitchDelay = switchDelay > 0 ? switchDelay : DEFAULT_SWITCH_DELAY;
+        final int count = getPageCount();
+        final int length = switchDelay.length;
+        for (int i = 0; i < count; i++) {
+            if (i < length) {
+                mSwitchDelay.add(switchDelay[i] > 0 ? switchDelay[i] : DEFAULT_SWITCH_DELAY);
+            } else {
+                mSwitchDelay.add(DEFAULT_SWITCH_DELAY);
+            }
+        }
+    }
+
+    private int getPageCount() {
+        return (mViewPager instanceof EndlessViewPager) ? ((EndlessViewPager) mViewPager).getPageCount() : mViewPager.getAdapter().getCount();
+    }
+
+    private int getCurrentItem() {
+        return mViewPager.getCurrentItem() % getPageCount();
     }
 
     /**
@@ -52,8 +67,10 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
      * @return BannerHandler
      */
     public BannerHandler start() {
-        sendMessage(mSwitchDelay);
-        mRunning = true;
+        if (!mRunning) {
+            sendMessage(mSwitchDelay.get(getCurrentItem()));
+            mRunning = true;
+        }
         return this;
     }
 
@@ -73,13 +90,15 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
      * @param switchDelay delay of auto scroll
      * @return BannerHandler
      */
-    public BannerHandler setSwitchDelay(long switchDelay) {
+    public BannerHandler setSwitchDelay(int position, long switchDelay) {
         if (mRunning) {
-            long diff = switchDelay > 0 ? mSwitchDelay - switchDelay : 0;
-            mSwitchDelay = switchDelay > 0 ? switchDelay : DEFAULT_SWITCH_DELAY;
-            sendMessage(diff > 0 ? diff : 0);
+            long diff = switchDelay > 0 ? mSwitchDelay.get(position) - switchDelay : 0;
+            mSwitchDelay.set(position, switchDelay > 0 ? switchDelay : DEFAULT_SWITCH_DELAY);
+            if (getCurrentItem() == position) {
+                sendMessage(diff > 0 ? diff : 0);
+            }
         } else {
-            mSwitchDelay = switchDelay > 0 ? switchDelay : DEFAULT_SWITCH_DELAY;
+            mSwitchDelay.set(position, switchDelay > 0 ? switchDelay : DEFAULT_SWITCH_DELAY);
         }
         return this;
     }
@@ -89,7 +108,7 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
      */
     @Override
     public void onPageSelected(int position) {
-        sendMessage(mSwitchDelay);
+        sendMessage(mSwitchDelay.get(getCurrentItem()));
     }
 
     /**
@@ -100,7 +119,7 @@ public class BannerHandler extends ViewPager.SimpleOnPageChangeListener {
         if (state == ViewPager.SCROLL_STATE_DRAGGING) {
             removeMessage();
         } else if (state == ViewPager.SCROLL_STATE_IDLE) {
-            sendMessage(mSwitchDelay);
+            sendMessage(mSwitchDelay.get(getCurrentItem()));
         }
     }
 
